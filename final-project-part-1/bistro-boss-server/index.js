@@ -140,17 +140,59 @@ const verify = (req,res,next)=>{
       if (req.query.category) {
         query = { category: req.query.category };
       }
-      const size = parseInt(req?.query?.size);
-      const page = parseInt(req?.query?.page);
-      console.log(req.query.size, req.query.page);
+     
       const getData = await menuCollection
         .find(query)
-        .skip(size * page)
-        .limit(size)
         .toArray();
 
       res.send(getData);
     });
+
+    // posting on menu db 
+    app.post('/menu',verifyAdmin, async(req,res)=>{
+      const menuData = req.body;
+      const result = await menuCollection.insertOne(menuData)
+      res.send(result)
+    })
+  // deleting an item from menu 
+  app.delete('/menu/:id', verify,verifyAdmin,async(req,res)=>{
+    const id = req.params.id;
+    console.log("id for deleting menu item",id);
+    const filter= {_id : id}
+    const query= {_id :new ObjectId(id)}
+    const result = await menuCollection.deleteOne(filter||query)
+    res.send(result)
+  })
+  // getting an item from menu 
+  app.get('/menu/:id', async(req,res)=>{
+    const id = req.params.id;
+    console.log("id for deleting menu item",id);
+    const filter= {_id : id}
+    const query= {_id :new ObjectId(id)}
+    const result = await menuCollection.findOne(filter||query)
+    res.send(result)
+  })
+  // updating an item from menu 
+  app.patch('/menu/:id', async(req,res)=>{
+    const id = req.params.id;
+    const formData = req.body
+    console.log("id for deleting menu item",id);
+    const filter= {_id : id}
+    const query= {_id :new ObjectId(id)}
+    const data = {
+      $set:{
+        name : formData.name, 
+        price : formData.price, 
+        category : formData.category, 
+        recipe : formData.recipe, 
+        image : formData.image, 
+      }
+    }
+    const result = await menuCollection.updateOne(filter||query,data)
+    res.send(result)
+  })
+
+
     // review api
     app.get("/reviews", async (req, res) => {
       const getData = await reviewsCollection.find().toArray();
