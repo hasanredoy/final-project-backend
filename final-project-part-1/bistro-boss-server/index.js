@@ -3,6 +3,8 @@ const cors = require("cors");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 const cookie = require("cookie-parser");
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const port = process.env.PORT || 5000;
@@ -35,6 +37,7 @@ async function run() {
     const usersCollection = client.db("menuDB").collection("users");
     const reviewsCollection = client.db("menuDB").collection("reviews");
     const cartsCollection = client.db("menuDB").collection("cart");
+    const paymentsCollection = client.db("menuDB").collection("payments");
      
 // jwt related apis 
 app.post('/jwt', async (req,res)=>{
@@ -217,6 +220,77 @@ const verify = (req,res,next)=>{
       const result = await cartsCollection.deleteOne(filter);
       res.send(result);
     });
+
+
+    // payments intent 
+    app.post(`/create-payment-intent`,async (req,res)=>{
+      const {price}=req.body
+      const amount = parseInt(price*100) 
+      
+      console.log('amount==>',amount);
+      const paymentIntent =await stripe.paymentIntents.create({
+        amount:amount,
+        currency:'usd',
+        payment_method_types: [
+          "card"
+        ],
+
+      })
+      res.send({
+        clientSecret: paymentIntent.client_secret
+      })
+    })
+    // geting user payment  
+    app.get('/payments/:email',verify,async(req,res)=>{
+      const query ={email : req?.params?.email}
+     console.log('users email==> ',req?.params?.email ,' decoded email ===>',req.decoded.email)
+     if(req.decoded?.email !== req?.params?.email ){
+      return res.status(400).send({message:'forbidden'})
+     }
+
+      const result =await paymentsCollection.find(query).toArray()
+      res.send(result)
+    })
+    // posting user payment info after successful payment 
+    app.post('/payments',async(req,res)=>{
+      const payment = req.body
+      console.log(payment);
+      const paymentResult =await paymentsCollection.insertOne(payment)
+
+  // carefully delete carts data after payment 
+   const query={_id:{
+    $in : payment.cartIds.map(id=> new ObjectId(id))
+   }}
+   const deleteResult= await cartsCollection.deleteMany(query)
+
+      res.send({paymentResult,deleteResult})
+    })
+
+  //  admin stats 
+  app.get('/admin-stats' , async(req,res)=>{
+    const users= await usersCollection.estimatedDocumentCount()
+    const menuItems = await menuCollection.estimatedDocumentCount()
+    const orders= await paymentsCollection.estimatedDocumentCount()
+
+
+    // counting all revenue from paymentsCollection in normal way 
+    // const payment = await paymentsCollection.find().toArray()
+    // const revenue = payment.reduce((previous,present)=> previous + present.price,0)
+
+    // calculating sum in best way 
+    const result = await paymentsCollection.aggregate([{
+      
+    }])
+
+    res.send({
+      users,
+      menuItems,
+      orders,
+      revenue
+    })
+  })
+
+
   } finally {
   }
 }
