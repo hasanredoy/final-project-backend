@@ -14,7 +14,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ['https://bistro-boss-ccbed.web.app','https://bistro-boss-ccbed.web.app'],
     credentials: true,
   })
 );
@@ -267,7 +267,7 @@ const verify = (req,res,next)=>{
     })
 
   //  admin stats 
-  app.get('/admin-stats' , async(req,res)=>{
+  app.get('/admin-stats' ,verify,verifyAdmin, async(req,res)=>{
     const users= await usersCollection.estimatedDocumentCount()
     const menuItems = await menuCollection.estimatedDocumentCount()
     const orders= await paymentsCollection.estimatedDocumentCount()
@@ -279,8 +279,15 @@ const verify = (req,res,next)=>{
 
     // calculating sum in best way 
     const result = await paymentsCollection.aggregate([{
-      
-    }])
+      $group:{
+        _id:null,
+        totalRevenue:{
+          $sum:'$price'
+        }
+      }
+    }]).toArray()
+   
+    const revenue = result.length>0?result[0].totalRevenue:0
 
     res.send({
       users,
@@ -288,6 +295,47 @@ const verify = (req,res,next)=>{
       orders,
       revenue
     })
+  })
+
+
+  // using aggregate to get orders stats by pipeline
+  app.get('/order-stats',verify,verifyAdmin,async(req,res)=>{
+    const result = await paymentsCollection.aggregate([
+      {
+        $unwind:"$menuIds"
+      },
+      {
+        $lookup:{
+          from:'menu',
+          localField:'menuIds',
+          foreignField:'_id',
+          as:'menuItems'
+        }
+      },
+    {
+      $unwind:'$menuItems'
+    },
+  {
+    $group:{
+      _id:'$menuItems.category',
+      quantity:{
+        $sum:1
+      },
+      revenue:{
+        $sum: '$menuItems.price'
+      }
+    }
+  },
+  {
+    $project:{
+     _id:0,
+     category:"$_id",
+     quantity:'$quantity',
+     revenue:"$revenue"
+    }
+  }
+    ]).toArray()
+    res.send(result)
   })
 
 
